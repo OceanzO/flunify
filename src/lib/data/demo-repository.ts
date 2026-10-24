@@ -1,7 +1,7 @@
 import { DEFAULT_MASTER_DATA } from "../constants";
 import { uid } from "../format";
 import { computeSS } from "../ss";
-import type { Assessment, LoginLog, ManagedUser, MasterData } from "../types";
+import type { AccountType, Assessment, LoginLog, ManagedUser, MasterData } from "../types";
 import type { Repository } from "./repository";
 import { SEED_ASSESSMENTS, SEED_LOGIN_LOGS, SEED_USERS } from "./seed";
 
@@ -70,22 +70,51 @@ export const demoRepository: Repository = {
     let migrated = false;
     const users = (rawUsers ?? []).map((u) => {
       const email = u.email || "";
-      const baseUsername = u.username || (email ? email.split("@")[0] : `user.${u.id}`);
+      let baseUsername = u.username || (email ? email.split("@")[0] : `user.${u.id}`);
       const isStudent = (u.accountType as string) === "student";
+      const isAdmin = u.accountType === "admin" || baseUsername.toLowerCase().includes("admin") || u.id === "demo-admin";
+      const targetRole: AccountType = isAdmin ? "admin" : "therapist";
 
-      if (isStudent || !u.username) {
+      let cleanUsername = baseUsername.replace(/\.mhs$/, ".wicara");
+      let cleanEmail = email ? email.replace(/\.mhs@/, ".wicara@") : `${cleanUsername}@flunify.id`;
+      let cleanFullName = u.fullName;
+
+      // 1. Fallback username jika belum terdefinisi sama sekali pada data lawas
+      if (isAdmin && !u.username) {
+        cleanUsername = "aku.admin";
+        cleanEmail = "aku.admin@flunify.id";
+      }
+
+      // 2. Normalisasi nama admin sistem jika masih nama lama dari seed lawas
+      if (isAdmin && cleanFullName === "Admin Sistem Poltekkes") {
+        cleanFullName = "Admin Flunify";
+      }
+
+      // 3. Fallback terapis jika belum terdefinisi sama sekali pada data lawas
+      if (!isAdmin && !u.username) {
+        cleanUsername = "terapis.wicara";
+        cleanEmail = "terapis.wicara@flunify.id";
+      }
+
+      if (
+        isStudent ||
+        !u.username ||
+        u.accountType !== targetRole ||
+        cleanUsername !== u.username ||
+        cleanFullName !== u.fullName
+      ) {
         migrated = true;
-        const cleanUsername = baseUsername.replace(/\.mhs$/, ".wicara");
-        const cleanEmail = email ? email.replace(/\.mhs@/, ".wicara@") : `${cleanUsername}@flunify.id`;
         return {
           ...u,
+          fullName: cleanFullName,
           username: cleanUsername,
           email: cleanEmail,
-          accountType: "therapist" as const,
+          accountType: targetRole,
         };
       }
       return {
         ...u,
+        fullName: cleanFullName,
         username: baseUsername,
       };
     });
@@ -113,6 +142,10 @@ export const demoRepository: Repository = {
       throw new Error(`Email '${finalEmail}' sudah digunakan.`);
     }
 
+    if (password && password.trim().length < 8) {
+      throw new Error("Kata sandi minimal harus 8 karakter.");
+    }
+
     const user: ManagedUser = {
       id: uid(),
       fullName: fullName.trim(),
@@ -134,19 +167,30 @@ export const demoRepository: Repository = {
     const target = users.find((u) => u.id === id);
     if (!target) throw new Error("Pengguna tidak ditemukan.");
 
-    if (updates.username) {
-      const cleanUsername = updates.username.trim().toLowerCase();
+    if (updates.password && updates.password.trim().length < 8) {
+      throw new Error("Kata sandi baru minimal harus 8 karakter.");
+    }
+
+    const cleanUsername = updates.username !== undefined
+      ? updates.username.trim().toLowerCase().replace(/\s+/g, ".")
+      : target.username;
+
+    if (updates.username && cleanUsername) {
       if (users.some((u) => u.id !== id && (u.username ?? "").toLowerCase() === cleanUsername)) {
         throw new Error(`Username '${cleanUsername}' sudah digunakan pengguna lain.`);
       }
     }
 
+    const updatedEmail = updates.email !== undefined
+      ? updates.email.trim().toLowerCase()
+      : (cleanUsername ? `${cleanUsername}@flunify.id` : target.email);
+
     const updatedUser: ManagedUser = {
       ...target,
       ...updates,
       fullName: updates.fullName !== undefined ? updates.fullName.trim() : target.fullName,
-      username: updates.username !== undefined ? updates.username.trim().toLowerCase() : target.username,
-      email: updates.email !== undefined ? updates.email.trim().toLowerCase() : target.email,
+      username: cleanUsername,
+      email: updatedEmail,
       password: updates.password !== undefined ? updates.password : target.password,
     };
 

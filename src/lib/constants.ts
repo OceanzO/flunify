@@ -14,8 +14,8 @@ export const DEFAULT_CREDENTIALS = {
     username: "aku.admin",
     password: "Poltekkes@Admin2026",
     email: "aku.admin@flunify.id",
-    fullName: "Admin Sistem Poltekkes",
-    title: "Administrator Sistem",
+    fullName: "Admin Flunify",
+    title: "Administrator",
   },
 } as const;
 

@@ -117,7 +117,7 @@ export const SEED_LOGIN_LOGS: LoginLog[] = [
   {
     id: "log-1",
     username: "aku.admin",
-    fullName: "Admin Sistem Poltekkes",
+    fullName: "Admin Flunify",
     role: "admin",
     status: "success",
     ipAddress: "192.168.1.10 (Internal Poltekkes)",

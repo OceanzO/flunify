@@ -133,7 +133,7 @@ create policy "profiles_select" on public.profiles for select to authenticated
 
 drop policy if exists "profiles_admin_update" on public.profiles;
 create policy "profiles_admin_update" on public.profiles for update to authenticated
-  using (public.is_admin()) with check (public.is_admin());
+  using (public.is_admin() or id = auth.uid()) with check (public.is_admin() or id = auth.uid());
 
 -- Clients: dipakai bersama oleh tim klinik.
 drop policy if exists "clients_select" on public.clients;
@@ -294,7 +294,7 @@ begin
       crypt('Poltekkes@Admin2026', gen_salt('bf')),
       now(),
       '{"provider":"email","providers":["email"],"role":"admin"}'::jsonb,
-      '{"full_name":"Admin Sistem Poltekkes","username":"aku.admin","title":"Administrator Sistem"}'::jsonb,
+      '{"full_name":"Admin Flunify","username":"aku.admin","title":"Administrator"}'::jsonb,
       'authenticated', 'authenticated', now(), now()
     );
   else
@@ -302,7 +302,7 @@ begin
        set encrypted_password = crypt('Poltekkes@Admin2026', gen_salt('bf')),
            email_confirmed_at = coalesce(email_confirmed_at, now()),
            raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) || '{"provider":"email","providers":["email"],"role":"admin"}'::jsonb,
-           raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || '{"full_name":"Admin Sistem Poltekkes","username":"aku.admin","title":"Administrator Sistem"}'::jsonb
+           raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || '{"full_name":"Admin Flunify","username":"aku.admin","title":"Administrator"}'::jsonb
      where email = 'aku.admin@flunify.id';
   end if;
 
@@ -338,6 +338,16 @@ begin
       email = excluded.email,
       account_type = excluded.account_type,
       status = 'active';
+
+  -- 5. Normalisasi data nama dan username lama jika sudah ada di profiles
+  update public.profiles
+     set full_name = 'Admin Flunify',
+         username = 'aku.admin'
+   where username in ('admin', 'aku.admin') or email in ('admin@flunify.id', 'aku.admin@flunify.id');
+
+  update public.profiles
+     set username = 'terapis.wicara'
+   where username in ('terapis', 'terapis.rina') or email in ('terapis@flunify.id', 'terapis.wicara@flunify.id');
 
 end $$;
 

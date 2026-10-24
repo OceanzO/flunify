@@ -114,53 +114,60 @@ export function AuthProvider({ initialSession, children }: { initialSession: Ses
         }
       }
 
-      // 1. Cek akun bawaan sistem (fallback cadangan agar presentasi selalu berhasil):
+      // 1. Cek akun dinamis dari penyimpanan lokal (localStorage) terlebih dahulu:
       let matchedRole: Role | null = null;
       let matchedName = "";
 
-      if (
-        (trimmed === DEFAULT_CREDENTIALS.admin.username.toLowerCase() ||
-          trimmed === DEFAULT_CREDENTIALS.admin.email.toLowerCase() ||
-          normalizedEmail === DEFAULT_CREDENTIALS.admin.email.toLowerCase()) &&
-        password === DEFAULT_CREDENTIALS.admin.password
-      ) {
-        matchedRole = "admin";
-        matchedName = DEFAULT_CREDENTIALS.admin.fullName;
-      } else if (
-        (trimmed === DEFAULT_CREDENTIALS.therapist.username.toLowerCase() ||
-          trimmed === DEFAULT_CREDENTIALS.therapist.email.toLowerCase() ||
-          normalizedEmail === DEFAULT_CREDENTIALS.therapist.email.toLowerCase()) &&
-        password === DEFAULT_CREDENTIALS.therapist.password
-      ) {
-        matchedRole = "therapist";
-        matchedName = DEFAULT_CREDENTIALS.therapist.fullName;
-      } else {
-        // 2. Cek akun dinamis yang ditambahkan/diubah admin di penyimpanan lokal:
-        try {
-          const raw = window.localStorage.getItem("fc_demo_users");
-          if (raw) {
-            const storedUsers: Array<{
-              fullName: string;
-              username: string;
-              email: string;
-              password?: string;
-              accountType: string;
-              status: string;
-            }> = JSON.parse(raw);
-            const found = storedUsers.find(
-              (u) =>
-                u.status === "active" &&
-                (u.username?.toLowerCase() === trimmed ||
-                  u.email?.toLowerCase() === normalizedEmail ||
-                  u.email?.toLowerCase() === trimmed) &&
-                (u.password === password || (!u.password && password === DEFAULT_CREDENTIALS.therapist.password))
-            );
-            if (found) {
-              matchedRole = found.accountType === "admin" ? "admin" : "therapist";
-              matchedName = found.fullName;
-            }
+      try {
+        const raw = window.localStorage.getItem("fc_demo_users");
+        if (raw) {
+          const storedUsers: Array<{
+            fullName: string;
+            username: string;
+            email: string;
+            password?: string;
+            accountType: string;
+            status: string;
+          }> = JSON.parse(raw);
+          const found = storedUsers.find(
+            (u) =>
+              u.status === "active" &&
+              (u.username?.toLowerCase() === trimmed ||
+                u.email?.toLowerCase() === normalizedEmail ||
+                u.email?.toLowerCase() === trimmed) &&
+              (u.password === password ||
+                (!u.password &&
+                  password ===
+                    (u.accountType === "admin"
+                      ? DEFAULT_CREDENTIALS.admin.password
+                      : DEFAULT_CREDENTIALS.therapist.password)))
+          );
+          if (found) {
+            matchedRole = found.accountType === "admin" ? "admin" : "therapist";
+            matchedName = found.fullName;
           }
-        } catch {}
+        }
+      } catch {}
+
+      // 2. Fallback cadangan ke akun bawaan sistem jika belum ada di localStorage:
+      if (!matchedRole) {
+        if (
+          (trimmed === DEFAULT_CREDENTIALS.admin.username.toLowerCase() ||
+            trimmed === DEFAULT_CREDENTIALS.admin.email.toLowerCase() ||
+            normalizedEmail === DEFAULT_CREDENTIALS.admin.email.toLowerCase()) &&
+          password === DEFAULT_CREDENTIALS.admin.password
+        ) {
+          matchedRole = "admin";
+          matchedName = DEFAULT_CREDENTIALS.admin.fullName;
+        } else if (
+          (trimmed === DEFAULT_CREDENTIALS.therapist.username.toLowerCase() ||
+            trimmed === DEFAULT_CREDENTIALS.therapist.email.toLowerCase() ||
+            normalizedEmail === DEFAULT_CREDENTIALS.therapist.email.toLowerCase()) &&
+          password === DEFAULT_CREDENTIALS.therapist.password
+        ) {
+          matchedRole = "therapist";
+          matchedName = DEFAULT_CREDENTIALS.therapist.fullName;
+        }
       }
 
       if (!matchedRole) {

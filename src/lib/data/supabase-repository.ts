@@ -197,8 +197,17 @@ export function createSupabaseRepository(supabase: SupabaseClient): Repository {
 
     async updateUser(id, updates) {
       const payload: Record<string, unknown> = {};
-      if (updates.fullName !== undefined) payload.full_name = updates.fullName;
-      if (updates.email !== undefined) payload.email = updates.email;
+      if (updates.fullName !== undefined) payload.full_name = updates.fullName.trim();
+      if (updates.username !== undefined) {
+        const cleanUser = updates.username.trim().toLowerCase().replace(/\s+/g, ".");
+        payload.username = cleanUser;
+        if (!updates.email || updates.email.endsWith("@flunify.id")) {
+          payload.email = `${cleanUser}@flunify.id`;
+        }
+      }
+      if (updates.email !== undefined && !payload.email) {
+        payload.email = updates.email.trim().toLowerCase();
+      }
       if (updates.accountType !== undefined) payload.account_type = updates.accountType;
       if (updates.status !== undefined) payload.status = updates.status;
 
@@ -208,11 +217,17 @@ export function createSupabaseRepository(supabase: SupabaseClient): Repository {
         .eq("id", id)
         .select()
         .single();
-      if (error || !data) fail("Gagal memperbarui pengguna", error);
+      if (error || !data) {
+        const msg = error?.message?.toLowerCase() || "";
+        if (msg.includes("unique") || msg.includes("profiles_username_key") || msg.includes("duplicate")) {
+          throw new Error("Username tersebut sudah digunakan oleh akun lain.");
+        }
+        fail("Gagal memperbarui pengguna", error);
+      }
       return {
         id: data.id,
         fullName: data.full_name,
-        username: (data as unknown as { username?: string }).username || data.email.split("@")[0],
+        username: (data as unknown as { username?: string }).username || (data.email ? data.email.split("@")[0] : ""),
         email: data.email,
         accountType: data.account_type,
         status: data.status,

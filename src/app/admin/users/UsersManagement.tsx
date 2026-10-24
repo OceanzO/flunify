@@ -184,6 +184,10 @@ export function UsersManagement() {
       setAddError("Nama lengkap dan username wajib diisi.");
       return;
     }
+    if (addPassword.trim() && addPassword.trim().length < 8) {
+      setAddError("Kata sandi awal harus memiliki minimal 8 karakter demi keamanan.");
+      return;
+    }
     if (!repo.addUser) {
       setAddError("Fitur penambahan akun tidak didukung di mode ini.");
       return;
@@ -222,6 +226,15 @@ export function UsersManagement() {
       setEditError("Nama lengkap dan username tidak boleh kosong.");
       return;
     }
+    if (editPassword.trim() && editPassword.trim().length < 8) {
+      setEditError("Kata sandi baru harus memiliki minimal 8 karakter demi keamanan.");
+      return;
+    }
+
+    const cleanUsername = editUsername.trim().toLowerCase().replace(/\s+/g, ".");
+    const cleanEmail = editingUser.email?.endsWith("@flunify.id")
+      ? `${cleanUsername}@flunify.id`
+      : (editEmail.trim().toLowerCase() || `${cleanUsername}@flunify.id`);
 
     setSubmittingEdit(true);
     setEditError(null);
@@ -229,8 +242,8 @@ export function UsersManagement() {
       if (repo.updateUser) {
         await repo.updateUser(editingUser.id, {
           fullName: editFullName.trim(),
-          username: editUsername.trim().toLowerCase(),
-          email: editEmail.trim().toLowerCase(),
+          username: cleanUsername,
+          email: cleanEmail,
           password: editPassword ? editPassword.trim() : editingUser.password,
           accountType: editAccountType,
           status: editStatus,
@@ -239,7 +252,7 @@ export function UsersManagement() {
         await repo.updateUserStatus(editingUser.id, editStatus);
       }
       setEditingUser(null);
-      notifySuccess(`Data akun @${editUsername.trim()} berhasil diperbarui.`);
+      notifySuccess(`Data akun @${cleanUsername} berhasil diperbarui.`);
       loadData();
     } catch (err: unknown) {
       setEditError(err instanceof Error ? err.message : "Gagal memperbarui data pengguna.");
@@ -459,7 +472,7 @@ export function UsersManagement() {
                     {filteredUsers.map((u) => {
                       const roleConfig = ROLE_LABELS[u.accountType] ?? ROLE_LABELS.therapist;
                       const isActionLoading = actionLoadingId === u.id;
-                      const isCurrentUser = u.email.toLowerCase() === activeAdminEmail;
+                      const isCurrentUser = u.id === session?.user.id || u.email.toLowerCase() === activeAdminEmail;
                       const passVisible = showPasswords[u.id] ?? false;
                       const displayPass = u.password || (u.accountType === "admin" ? "Poltekkes@Admin2026" : "Terapis@Flunify2026");
 
@@ -780,39 +793,57 @@ export function UsersManagement() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="label">Username Login</label>
-                  <div className="relative">
-                    <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 font-mono text-xs font-bold text-muted">
-                      @
+              <div>
+                <label className="label">Username Login</label>
+                <div className="relative">
+                  <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 font-mono text-xs font-bold text-muted">
+                    @
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Masukkan username"
+                    value={addUsername}
+                    onChange={(e) => setAddUsername(e.target.value.toLowerCase().replace(/\s+/g, "."))}
+                    className="input pl-7 font-mono text-xs font-semibold"
+                  />
+                </div>
+                <p className="mt-1 text-[11px] text-muted">Digunakan sebagai identitas saat login ke portal.</p>
+              </div>
+
+              {/* Kata Sandi Awal (Dedicated Card Block, Full Width) */}
+              <div className="rounded-xl border border-line bg-canvas/50 p-3.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="label mb-0 text-navy font-bold flex items-center gap-1.5">
+                    <KeyRound className="h-3.5 w-3.5 text-brand" />
+                    Kata Sandi Awal
+                  </label>
+                  {addPassword.length > 0 && (
+                    <span className={cn("text-[11px] font-bold px-2 py-0.5 rounded-md", addPassword.length >= 8 ? "bg-success-light text-success" : "bg-warning-light text-warning")}>
+                      {addPassword.length >= 8 ? "✓ Memenuhi syarat (8+ karakter)" : `${addPassword.length}/8 karakter`}
                     </span>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Masukkan username"
-                      value={addUsername}
-                      onChange={(e) => setAddUsername(e.target.value.toLowerCase().replace(/\s+/g, "."))}
-                      className="input pl-7 font-mono text-xs font-semibold"
-                    />
-                  </div>
-                  <p className="mt-1 text-[11px] text-muted">Digunakan saat login ke portal.</p>
+                  )}
                 </div>
 
-                <div>
-                  <label className="label">Kata Sandi Awal</label>
-                  <div className="relative">
-                    <KeyRound className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 h-3.5 w-3.5 text-muted" />
-                    <input
-                      type="text"
-                      required
-                      placeholder="Masukkan kata sandi"
-                      value={addPassword}
-                      onChange={(e) => setAddPassword(e.target.value)}
-                      className="input pl-8 font-mono text-xs"
-                    />
-                  </div>
+                <div className="relative">
+                  <KeyRound className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 h-3.5 w-3.5 text-muted" />
+                  <input
+                    type="text"
+                    required
+                    minLength={8}
+                    placeholder="Minimal 8 karakter"
+                    value={addPassword}
+                    onChange={(e) => setAddPassword(e.target.value)}
+                    className={cn(
+                      "input pl-8 font-mono text-xs bg-white",
+                      addPassword.length > 0 && addPassword.length < 8 && "border-warning focus:border-warning"
+                    )}
+                  />
                 </div>
+
+                <p className="text-[11px] text-muted leading-relaxed">
+                  Ketentuan: Kata sandi akun wajib minimal <strong>8 karakter</strong> demi keamanan sistem.
+                </p>
               </div>
 
               <div>
@@ -907,6 +938,7 @@ export function UsersManagement() {
                 />
               </div>
 
+              {/* Username & Peran (Baris 2 kolom simetris & seimbang) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="label">Username</label>
@@ -926,24 +958,7 @@ export function UsersManagement() {
                 </div>
 
                 <div>
-                  <label className="label">Ubah / Reset Kata Sandi</label>
-                  <div className="relative">
-                    <KeyRound className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 h-3.5 w-3.5 text-muted" />
-                    <input
-                      type="text"
-                      placeholder="Masukkan kata sandi baru (opsional)"
-                      value={editPassword}
-                      onChange={(e) => setEditPassword(e.target.value)}
-                      className="input pl-8 font-mono text-xs"
-                    />
-                  </div>
-                  <p className="mt-1 text-[10px] text-muted">Biarkan kosong jika tidak ingin mengubah password.</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="label">Peran</label>
+                  <label className="label">Peran Pengguna</label>
                   <select
                     value={editAccountType}
                     onChange={(e) => setEditAccountType(e.target.value as AccountType)}
@@ -953,18 +968,53 @@ export function UsersManagement() {
                     <option value="admin">Administrator</option>
                   </select>
                 </div>
+              </div>
 
-                <div>
-                  <label className="label">Status Akun</label>
-                  <select
-                    value={editStatus}
-                    onChange={(e) => setEditStatus(e.target.value as AccountStatus)}
-                    className="input text-xs"
-                  >
-                    <option value="active">Aktif</option>
-                    <option value="inactive">Nonaktif</option>
-                  </select>
+              {/* Status Akun */}
+              <div>
+                <label className="label">Status Akun</label>
+                <select
+                  value={editStatus}
+                  onChange={(e) => setEditStatus(e.target.value as AccountStatus)}
+                  className="input text-xs"
+                >
+                  <option value="active">Aktif (Dapat mengakses sistem)</option>
+                  <option value="inactive">Nonaktif (Akses ditangguhkan)</option>
+                </select>
+              </div>
+
+              {/* Ubah / Reset Kata Sandi (Full Width Card - Rapi, Lega, Proporsional) */}
+              <div className="rounded-xl border border-line bg-canvas/50 p-3.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="label mb-0 text-navy font-bold flex items-center gap-1.5">
+                    <KeyRound className="h-3.5 w-3.5 text-brand" />
+                    Ubah Kata Sandi (Opsional)
+                  </label>
+                  {editPassword.length > 0 && (
+                    <span className={cn("text-[11px] font-bold px-2 py-0.5 rounded-md", editPassword.length >= 8 ? "bg-success-light text-success" : "bg-warning-light text-warning")}>
+                      {editPassword.length >= 8 ? "✓ Memenuhi syarat (8+ karakter)" : `${editPassword.length}/8 karakter`}
+                    </span>
+                  )}
                 </div>
+
+                <div className="relative">
+                  <KeyRound className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 h-3.5 w-3.5 text-muted" />
+                  <input
+                    type="text"
+                    minLength={8}
+                    placeholder="Masukkan sandi baru (opsional)"
+                    value={editPassword}
+                    onChange={(e) => setEditPassword(e.target.value)}
+                    className={cn(
+                      "input pl-8 font-mono text-xs bg-white",
+                      editPassword.length > 0 && editPassword.length < 8 && "border-warning focus:border-warning"
+                    )}
+                  />
+                </div>
+
+                <p className="text-[11px] text-muted leading-relaxed">
+                  Ketentuan: Minimal <strong>8 karakter</strong>. Biarkan kosong jika tidak ingin mengubah kata sandi lama akun ini.
+                </p>
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-4 border-t border-line">
