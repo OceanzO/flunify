@@ -108,6 +108,7 @@ export function AuthProvider({ initialSession, children }: { initialSession: Ses
             userAgent: clientUA,
             message: "Autentikasi Supabase berhasil",
           });
+          clearCookie(DEMO_COOKIE);
           setCookie(ROLE_COOKIE, role);
           hardNavigate(role === "admin" ? homeFor(role) : destination);
           return {};

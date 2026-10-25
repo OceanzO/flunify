@@ -314,7 +314,21 @@ export function UsersManagement() {
         title="Manajemen Pengguna & Riwayat"
         description="Kelola akun terapis wicara, ubah kata sandi, hapus akun, dan monitor riwayat login secara menyeluruh."
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {session.mode === "supabase" ? (
+              <span className="inline-flex items-center gap-1.5 rounded-xl border border-success/30 bg-success-light px-3 py-1.5 text-xs font-bold text-success shadow-xs">
+                <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+                Database Supabase
+              </span>
+            ) : (
+              <span
+                className="inline-flex items-center gap-1.5 rounded-xl border border-warning/30 bg-warning-light px-3 py-1.5 text-xs font-bold text-warning shadow-xs"
+                title="Berjalan di penyimpanan lokal browser (Mode Demo)"
+              >
+                <span className="h-2 w-2 rounded-full bg-warning" />
+                Mode Demo (Lokal)
+              </span>
+            )}
             <button
               id="refresh-data"
               type="button"
