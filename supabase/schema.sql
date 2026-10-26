@@ -21,22 +21,33 @@ create table if not exists public.profiles (
   created_at   timestamptz not null default now()
 );
 
--- Buat profil otomatis saat user baru mendaftar / diundang.
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql security definer set search_path = public
 as $$
+declare
+  target_username text;
 begin
+  target_username := coalesce(new.raw_user_meta_data ->> 'username', split_part(new.email, '@', 1));
+  if exists (select 1 from public.profiles where username = target_username and id <> new.id) then
+    target_username := target_username || '.' || substr(new.id::text, 1, 4);
+  end if;
+
   insert into public.profiles (id, full_name, username, email, account_type)
   values (
     new.id,
     coalesce(new.raw_user_meta_data ->> 'full_name', split_part(new.email, '@', 1)),
-    coalesce(new.raw_user_meta_data ->> 'username', split_part(new.email, '@', 1)),
+    target_username,
     new.email,
     case when new.raw_app_meta_data ->> 'role' = 'admin' then 'admin'
          when new.raw_user_meta_data ->> 'account_type' = 'student' then 'student'
          else 'therapist' end
-  );
+  )
+  on conflict (id) do update set
+    full_name = excluded.full_name,
+    username = excluded.username,
+    email = excluded.email,
+    account_type = excluded.account_type;
   return new;
 end;
 $$;
