@@ -127,24 +127,65 @@ insert into public.master_options (category, label, sort_order) values
   ('disfluency', 'Perilaku penyerta', 6)
 on conflict (category, label) do nothing;
 
+-- ---------- Login History / Audit Trail ----------
+create table if not exists public.login_history (
+  id         uuid primary key default gen_random_uuid(),
+  username   text not null,
+  role       text not null,
+  status     text not null check (status in ('success', 'failed')),
+  ip_address text not null default '-',
+  user_agent text not null default '-',
+  logged_at  timestamptz not null default now()
+);
+create index if not exists login_history_logged_at_idx on public.login_history (logged_at desc);
+
 -- =====================================================================
 -- Row Level Security
 -- =====================================================================
 alter table public.profiles         enable row level security;
+alter table public.login_history    enable row level security;
 alter table public.clients          enable row level security;
 alter table public.assessments      enable row level security;
 alter table public.observations     enable row level security;
 alter table public.audio_recordings enable row level security;
 alter table public.master_options   enable row level security;
 
--- Profiles: lihat diri sendiri, admin lihat & ubah semua.
+-- Profiles: Akses tim klinik (Select, Insert, Update, Delete)
 drop policy if exists "profiles_select" on public.profiles;
 create policy "profiles_select" on public.profiles for select to authenticated
-  using (id = auth.uid() or public.is_admin());
+  using (true);
+
+drop policy if exists "profiles_insert" on public.profiles;
+create policy "profiles_insert" on public.profiles for insert to authenticated
+  with check (true);
 
 drop policy if exists "profiles_admin_update" on public.profiles;
-create policy "profiles_admin_update" on public.profiles for update to authenticated
-  using (public.is_admin() or id = auth.uid()) with check (public.is_admin() or id = auth.uid());
+drop policy if exists "profiles_update" on public.profiles;
+create policy "profiles_update" on public.profiles for update to authenticated
+  using (true) with check (true);
+
+drop policy if exists "profiles_delete" on public.profiles;
+create policy "profiles_delete" on public.profiles for delete to authenticated
+  using (true);
+
+-- Login History: Simpan log login dan baca riwayat audit
+drop policy if exists "login_history_select" on public.login_history;
+create policy "login_history_select" on public.login_history for select to authenticated
+  using (true);
+
+drop policy if exists "login_history_insert" on public.login_history;
+create policy "login_history_insert" on public.login_history for insert to anon, authenticated
+  with check (true);
+
+drop policy if exists "login_history_delete" on public.login_history;
+create policy "login_history_delete" on public.login_history for delete to authenticated
+  using (true);
+
+-- =====================================================================
+-- Realtime: Sinkronisasi Otomatis Antara Localhost & Vercel
+-- =====================================================================
+alter publication supabase_realtime add table public.profiles;
+alter publication supabase_realtime add table public.login_history;
 
 -- Clients: dipakai bersama oleh tim klinik.
 drop policy if exists "clients_select" on public.clients;
@@ -266,101 +307,57 @@ create policy "audio_delete_policy" on storage.objects for delete to authenticat
 -- =====================================================================
 create extension if not exists pgcrypto;
 
-do $$
-declare
-  therapist_uid uuid := '11111111-1111-1111-1111-111111111111';
-  admin_uid     uuid := '22222222-2222-2222-2222-222222222222';
-begin
-  -- 1. Akun Terapis Wicara (terapis.wicara@flunify.id / Terapis@Flunify2026)
-  if not exists (select 1 from auth.users where email = 'terapis.wicara@flunify.id') then
-    insert into auth.users (
-      id, instance_id, email, encrypted_password, email_confirmed_at,
-      raw_app_meta_data, raw_user_meta_data, role, aud, created_at, updated_at
-    ) values (
-      therapist_uid, '00000000-0000-0000-0000-000000000000',
-      'terapis.wicara@flunify.id',
-      crypt('Terapis@Flunify2026', gen_salt('bf')),
-      now(),
-      '{"provider":"email","providers":["email"],"role":"therapist"}'::jsonb,
-      '{"full_name":"Amanda Pratiwi, A.Md.Kes","username":"terapis.wicara","title":"Terapis Wicara"}'::jsonb,
-      'authenticated', 'authenticated', now(), now()
-    );
-  else
-    update auth.users
-       set encrypted_password = crypt('Terapis@Flunify2026', gen_salt('bf')),
-           email_confirmed_at = coalesce(email_confirmed_at, now()),
-           raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) || '{"provider":"email","providers":["email"],"role":"therapist"}'::jsonb,
-           raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || '{"full_name":"Amanda Pratiwi, A.Md.Kes","username":"terapis.wicara","title":"Terapis Wicara"}'::jsonb
-     where email = 'terapis.wicara@flunify.id';
-  end if;
+-- Matikan sementara trigger agar tidak bentrok saat penyelarasan
+alter table auth.users disable trigger on_auth_user_created;
 
-  -- 2. Akun Administrator Sistem (aku.admin@flunify.id / Poltekkes@Admin2026)
-  if not exists (select 1 from auth.users where email = 'aku.admin@flunify.id') then
-    insert into auth.users (
-      id, instance_id, email, encrypted_password, email_confirmed_at,
-      raw_app_meta_data, raw_user_meta_data, role, aud, created_at, updated_at
-    ) values (
-      admin_uid, '00000000-0000-0000-0000-000000000000',
-      'aku.admin@flunify.id',
-      crypt('Poltekkes@Admin2026', gen_salt('bf')),
-      now(),
-      '{"provider":"email","providers":["email"],"role":"admin"}'::jsonb,
-      '{"full_name":"Admin Flunify","username":"aku.admin","title":"Administrator"}'::jsonb,
-      'authenticated', 'authenticated', now(), now()
-    );
-  else
-    update auth.users
-       set encrypted_password = crypt('Poltekkes@Admin2026', gen_salt('bf')),
-           email_confirmed_at = coalesce(email_confirmed_at, now()),
-           raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) || '{"provider":"email","providers":["email"],"role":"admin"}'::jsonb,
-           raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || '{"full_name":"Admin Flunify","username":"aku.admin","title":"Administrator"}'::jsonb
-     where email = 'aku.admin@flunify.id';
-  end if;
+-- Bersihkan data lama jika ada bentrok
+delete from public.profiles where username in ('aku.admin', 'terapis.wicara', 'oceanz') or email in ('aku.admin@flunify.id', 'terapis.wicara@flunify.id', 'oceanz@flunify.id');
+delete from auth.identities where email in ('aku.admin@flunify.id', 'terapis.wicara@flunify.id', 'oceanz@flunify.id');
+delete from auth.users where email in ('aku.admin@flunify.id', 'terapis.wicara@flunify.id', 'oceanz@flunify.id');
 
-  -- 3. Sinkronkan ke auth.identities untuk GoTrue
-  insert into auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at)
-  select
-    u.id::text,
-    u.id,
-    json_build_object('sub', u.id::text, 'email', u.email),
-    'email',
-    u.email,
-    now(),
-    now(),
-    now()
-  from auth.users u
-  where u.email in ('terapis.wicara@flunify.id', 'aku.admin@flunify.id')
-    and not exists (select 1 from auth.identities i where i.user_id = u.id);
+-- Masukkan akun ke auth.users
+insert into auth.users (
+  id, instance_id, email, encrypted_password, email_confirmed_at,
+  raw_app_meta_data, raw_user_meta_data, role, aud, created_at, updated_at
+) values
+  (
+    '22222222-2222-2222-2222-222222222222', '00000000-0000-0000-0000-000000000000',
+    'aku.admin@flunify.id', crypt('Poltekkes@Admin2026', gen_salt('bf')), now(),
+    '{"provider":"email","providers":["email"],"role":"admin"}'::jsonb,
+    '{"full_name":"Azzahrah","username":"aku.admin","title":"Administrator"}'::jsonb,
+    'authenticated', 'authenticated', now(), now()
+  ),
+  (
+    '33333333-3333-3333-3333-333333333333', '00000000-0000-0000-0000-000000000000',
+    'oceanz@flunify.id', crypt('Terapis@Flunify2026', gen_salt('bf')), now(),
+    '{"provider":"email","providers":["email"],"role":"therapist"}'::jsonb,
+    '{"full_name":"Achmad Agam","username":"oceanz","title":"Terapis Wicara"}'::jsonb,
+    'authenticated', 'authenticated', now(), now()
+  ),
+  (
+    '44444444-4444-4444-4444-444444444444', '00000000-0000-0000-0000-000000000000',
+    'terapis.wicara@flunify.id', crypt('Terapis@Flunify2026', gen_salt('bf')), now(),
+    '{"provider":"email","providers":["email"],"role":"therapist"}'::jsonb,
+    '{"full_name":"Someone","username":"terapis.wicara","title":"Terapis Wicara"}'::jsonb,
+    'authenticated', 'authenticated', now(), now()
+  );
 
-  -- 4. Sinkronkan ke public.profiles
-  insert into public.profiles (id, full_name, username, email, account_type, status)
-  select
-    u.id,
-    coalesce(u.raw_user_meta_data ->> 'full_name', split_part(u.email, '@', 1)),
-    coalesce(u.raw_user_meta_data ->> 'username', split_part(u.email, '@', 1)),
-    u.email,
-    case when (u.raw_app_meta_data ->> 'role') = 'admin' then 'admin' else 'therapist' end,
-    'active'
-  from auth.users u
-  where u.email in ('terapis.wicara@flunify.id', 'aku.admin@flunify.id')
-  on conflict (id) do update
-  set full_name = excluded.full_name,
-      username = excluded.username,
-      email = excluded.email,
-      account_type = excluded.account_type,
-      status = 'active';
+-- Masukkan ke auth.identities
+insert into auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at)
+values
+  ('22222222-2222-2222-2222-222222222222', '22222222-2222-2222-2222-222222222222', json_build_object('sub', '22222222-2222-2222-2222-222222222222', 'email', 'aku.admin@flunify.id'), 'email', 'aku.admin@flunify.id', now(), now(), now()),
+  ('33333333-3333-3333-3333-333333333333', '33333333-3333-3333-3333-333333333333', json_build_object('sub', '33333333-3333-3333-3333-333333333333', 'email', 'oceanz@flunify.id'), 'email', 'oceanz@flunify.id', now(), now(), now()),
+  ('44444444-4444-4444-4444-444444444444', '44444444-4444-4444-4444-444444444444', json_build_object('sub', '44444444-4444-4444-4444-444444444444', 'email', 'terapis.wicara@flunify.id'), 'email', 'terapis.wicara@flunify.id', now(), now(), now());
 
-  -- 5. Normalisasi data nama dan username lama jika sudah ada di profiles
-  update public.profiles
-     set full_name = 'Admin Flunify',
-         username = 'aku.admin'
-   where username in ('admin', 'aku.admin') or email in ('admin@flunify.id', 'aku.admin@flunify.id');
+-- Masukkan profil ke public.profiles
+insert into public.profiles (id, full_name, username, email, account_type, status)
+values
+  ('22222222-2222-2222-2222-222222222222', 'Azzahrah', 'aku.admin', 'aku.admin@flunify.id', 'admin', 'active'),
+  ('33333333-3333-3333-3333-333333333333', 'Achmad Agam', 'oceanz', 'oceanz@flunify.id', 'therapist', 'active'),
+  ('44444444-4444-4444-4444-444444444444', 'Someone', 'terapis.wicara', 'terapis.wicara@flunify.id', 'therapist', 'active');
 
-  update public.profiles
-     set username = 'terapis.wicara'
-   where username in ('terapis', 'terapis.rina') or email in ('terapis@flunify.id', 'terapis.wicara@flunify.id');
-
-end $$;
+-- Hidupkan kembali trigger
+alter table auth.users enable trigger on_auth_user_created;
 
 -- =====================================================================
 -- SEED DATA AWAL: Klien & Asesmen Percontohan (Table Editor Terisi)

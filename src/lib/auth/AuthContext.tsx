@@ -113,6 +113,18 @@ export function AuthProvider({ initialSession, children }: { initialSession: Ses
           hardNavigate(role === "admin" ? homeFor(role) : destination);
           return {};
         }
+
+        if (error) {
+          await demoRepository.recordLoginLog?.({
+            username: trimmed,
+            role,
+            status: "failed",
+            ipAddress: "127.0.0.1",
+            userAgent: clientUA,
+            message: error.message,
+          });
+          return { error: translateAuthError(error.message) };
+        }
       }
 
       // 1. Cek akun dinamis dari penyimpanan lokal (localStorage) terlebih dahulu:

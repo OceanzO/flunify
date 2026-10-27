@@ -148,7 +148,7 @@ export function createSupabaseRepository(supabase: SupabaseClient): Repository {
 
     async listUsers() {
       const [{ data: profiles, error }, { data: counts }] = await Promise.all([
-        supabase.from("profiles").select("id, full_name, email, account_type, status, created_at").order("created_at"),
+        supabase.from("profiles").select("id, full_name, username, email, account_type, status, created_at").order("created_at"),
         supabase.from("assessments").select("therapist_id"),
       ]);
       if (error) fail("Gagal memuat pengguna", error);
@@ -158,7 +158,7 @@ export function createSupabaseRepository(supabase: SupabaseClient): Repository {
         (p): ManagedUser => ({
           id: p.id,
           fullName: p.full_name,
-          username: (p as unknown as { username?: string }).username || p.email.split("@")[0],
+          username: (p as unknown as { username?: string }).username || (p.email ? p.email.split("@")[0] : `user.${p.id}`),
           email: p.email,
           accountType: p.account_type,
           status: p.status,
@@ -170,23 +170,30 @@ export function createSupabaseRepository(supabase: SupabaseClient): Repository {
     },
 
     addUser: async ({ fullName, username, email, accountType }) => {
-      const cleanUsername = username.trim().toLowerCase();
+      const cleanUsername = username.trim().toLowerCase().replace(/\s+/g, ".");
       const finalEmail = (email?.trim() || `${cleanUsername}@flunify.id`).toLowerCase();
       const { data, error } = await supabase
         .from("profiles")
         .insert({
           full_name: fullName.trim(),
+          username: cleanUsername,
           email: finalEmail,
           account_type: accountType,
           status: "active",
         })
         .select()
         .single();
-      if (error || !data) fail("Gagal menambahkan profil", error);
+      if (error || !data) {
+        const msg = error?.message?.toLowerCase() || "";
+        if (msg.includes("unique") || msg.includes("profiles_username_key") || msg.includes("duplicate")) {
+          throw new Error(`Username '@${cleanUsername}' sudah digunakan pengguna lain.`);
+        }
+        fail("Gagal menambahkan profil", error);
+      }
       return {
         id: data.id,
         fullName: data.full_name,
-        username: cleanUsername,
+        username: (data as unknown as { username?: string }).username || cleanUsername,
         email: data.email,
         accountType: data.account_type,
         status: data.status,

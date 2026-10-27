@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { Badge, EmptyState, PageHeader, Skeleton, StatCard } from "@/components/ui";
 import { useAuth, useSession } from "@/lib/auth/AuthContext";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useRepository } from "@/lib/data/useRepository";
 import { cn, formatDate, initials } from "@/lib/format";
 import type { AccountStatus, AccountType, LoginLog, ManagedUser } from "@/lib/types";
@@ -106,6 +107,40 @@ export function UsersManagement() {
 
   useEffect(() => {
     loadData();
+
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    // Sinkronisasi Real-Time: dengar penambahan, perubahan, dan penghapusan pengguna di Supabase
+    const profilesSub = supabase
+      .channel("flunify-profiles-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "profiles" },
+        () => {
+          loadData();
+        }
+      )
+      .subscribe();
+
+    // Sinkronisasi Real-Time: dengar riwayat login baru di Supabase
+    const logsSub = supabase
+      .channel("flunify-logs-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "login_history" },
+        () => {
+          if (repo.listLoginLogs) {
+            repo.listLoginLogs().then((l) => setLogs(l)).catch(() => {});
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(profilesSub);
+      supabase.removeChannel(logsSub);
+    };
   }, [repo]);
 
   // Tampilkan notifikasi sesaat
@@ -315,20 +350,10 @@ export function UsersManagement() {
         description="Kelola akun terapis wicara, ubah kata sandi, hapus akun, dan monitor riwayat login secara menyeluruh."
         actions={
           <div className="flex items-center gap-2 flex-wrap">
-            {session.mode === "supabase" ? (
-              <span className="inline-flex items-center gap-1.5 rounded-xl border border-success/30 bg-success-light px-3 py-1.5 text-xs font-bold text-success shadow-xs">
-                <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
-                Database Supabase
-              </span>
-            ) : (
-              <span
-                className="inline-flex items-center gap-1.5 rounded-xl border border-warning/30 bg-warning-light px-3 py-1.5 text-xs font-bold text-warning shadow-xs"
-                title="Berjalan di penyimpanan lokal browser (Mode Demo)"
-              >
-                <span className="h-2 w-2 rounded-full bg-warning" />
-                Mode Demo (Lokal)
-              </span>
-            )}
+            <span className="inline-flex items-center gap-1.5 rounded-xl border border-success/30 bg-success-light px-3 py-1.5 text-xs font-bold text-success shadow-xs">
+              <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+              Realtime Supabase Cloud
+            </span>
             <button
               id="refresh-data"
               type="button"
