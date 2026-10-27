@@ -102,3 +102,34 @@ export function getSSISeverity(ssPercentage: number): {
     description: "> 25% SS: Memerlukan program terapi klinis intensif.",
   };
 }
+
+/**
+ * Menghitung jumlah kata dari teks ucapan.
+ */
+export function countWords(text: string): number {
+  if (!text || !text.trim()) return 0;
+  return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+/**
+ * Estimasi jumlah suku kata bahasa Indonesia berbasis gugus vokal & diftong.
+ * Suku kata rata-rata per kata bahasa Indonesia berkisar antara 2 hingga 3 suku kata.
+ */
+export function countIndonesianSyllables(text: string): number {
+  const clean = text.toLowerCase().replace(/[^a-z\s]/g, " ").trim();
+  if (!clean) return 0;
+  const words = clean.split(/\s+/).filter(Boolean);
+  let total = 0;
+  for (const word of words) {
+    // Gabungan konsonan Indonesia
+    // Diftong (ai, au, oi, ei) dihitung sebagai 1 inti vokal suku kata
+    const normalized = word
+      .replace(/kh|ng|ny|sy/g, "k")
+      .replace(/ai|au|oi|ei/g, "a");
+    const vowels = normalized.match(/[aiueo]/g);
+    const count = vowels ? vowels.length : 1;
+    total += Math.max(1, count);
+  }
+  return total;
+}
+

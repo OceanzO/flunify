@@ -95,19 +95,19 @@ export function SectionCard({
   className?: string;
 }) {
   return (
-    <section className={cn("card p-6 animate-fade-up", className)}>
-      <div className="mb-5 flex items-start gap-3">
-        <span className="relative grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-light text-brand">
-          <Icon className="h-5 w-5" />
+    <section className={cn("card p-4 sm:p-5 animate-fade-up", className)}>
+      <div className="mb-3.5 flex items-start gap-2.5">
+        <span className="relative grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-light text-brand">
+          <Icon className="h-4 w-4" />
           {step !== undefined && (
-            <span className="absolute -top-1.5 -right-1.5 grid h-5 w-5 place-items-center rounded-full bg-navy text-[10px] font-bold text-white">
+            <span className="absolute -top-1 -right-1 grid h-4 w-4 place-items-center rounded-full bg-navy text-[9px] font-bold text-white">
               {step}
             </span>
           )}
         </span>
         <div>
-          <h2 className="text-base font-bold text-navy">{title}</h2>
-          {description && <p className="text-sm text-muted">{description}</p>}
+          <h2 className="text-sm font-bold text-navy leading-snug">{title}</h2>
+          {description && <p className="text-xs text-muted leading-tight mt-0.5">{description}</p>}
         </div>
       </div>
       {children}

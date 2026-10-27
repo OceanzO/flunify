@@ -25,6 +25,8 @@ export interface AudioMeta {
   sizeBytes: number;
   /** Path di Supabase Storage bucket `audio_samples`; null di Mode Demo. */
   fileReference: string | null;
+  /** URL publik langsung untuk streaming audio jika tersedia */
+  url?: string | null;
 }
 
 export interface Assessment {

@@ -29,8 +29,13 @@ const ASSESSMENT_SELECT = `
   audio_recordings ( file_reference, duration_seconds, size_bytes )
 `;
 
-function mapAssessment(row: AssessmentRow): Assessment {
+function mapAssessment(row: AssessmentRow, supabase?: SupabaseClient): Assessment {
   const audio = row.audio_recordings?.[0];
+  let audioUrl: string | null = null;
+  if (audio?.file_reference && supabase) {
+    const { data } = supabase.storage.from(AUDIO_BUCKET).getPublicUrl(audio.file_reference);
+    audioUrl = data?.publicUrl ?? null;
+  }
   return {
     id: row.id,
     clientCode: row.clients?.client_code ?? "-",
@@ -44,7 +49,12 @@ function mapAssessment(row: AssessmentRow): Assessment {
     ssPercentage: Number(row.ss_percentage),
     therapistNotes: row.therapist_notes,
     audio: audio
-      ? { durationSeconds: audio.duration_seconds, sizeBytes: Number(audio.size_bytes), fileReference: audio.file_reference }
+      ? {
+          durationSeconds: audio.duration_seconds,
+          sizeBytes: Number(audio.size_bytes),
+          fileReference: audio.file_reference,
+          url: audioUrl,
+        }
       : null,
     therapistName: row.profiles?.full_name ?? "-",
     createdAt: row.created_at,
@@ -64,7 +74,7 @@ export function createSupabaseRepository(supabase: SupabaseClient): Repository {
         .select(ASSESSMENT_SELECT)
         .order("created_at", { ascending: false });
       if (error) fail("Gagal memuat asesmen", error);
-      return (data as unknown as AssessmentRow[]).map(mapAssessment);
+      return (data as unknown as AssessmentRow[]).map((r) => mapAssessment(r, supabase));
     },
 
     async createAssessment(input, user) {
@@ -119,8 +129,13 @@ export function createSupabaseRepository(supabase: SupabaseClient): Repository {
           size_bytes: input.audioBlob.size,
           mime_type: input.audioBlob.type,
         });
-        if (error) fail("Gagal menyimpan metadata audio", error);
-        audio = { durationSeconds: input.audioDurationSeconds, sizeBytes: input.audioBlob.size, fileReference: path };
+        const { data: publicUrlData } = supabase.storage.from(AUDIO_BUCKET).getPublicUrl(path);
+        audio = {
+          durationSeconds: input.audioDurationSeconds,
+          sizeBytes: input.audioBlob.size,
+          fileReference: path,
+          url: publicUrlData?.publicUrl ?? null,
+        };
       }
 
       return {

@@ -17,10 +17,12 @@ import {
   Trash2,
   X,
   Loader2,
+  Eye,
 } from "lucide-react";
 import { Badge, EmptyState, PageHeader, Skeleton, StatCard } from "@/components/ui";
 import { useRepository } from "@/lib/data/useRepository";
 import { formatBytes, formatDate, formatDuration, formatPercent } from "@/lib/format";
+import { getSSISeverity } from "@/lib/ss";
 import type { Assessment, ManagedUser, MasterData, StorageUsage } from "@/lib/types";
 
 export function AdminOverview() {
@@ -34,7 +36,8 @@ export function AdminOverview() {
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
   const [query, setQuery] = useState("");
 
-  // Modal Hapus Asesmen (Hanya Admin)
+  // Modal Detail & Hapus Asesmen (Admin)
+  const [viewingAssessment, setViewingAssessment] = useState<Assessment | null>(null);
   const [deletingAssessment, setDeletingAssessment] = useState<Assessment | null>(null);
   const [submittingDelete, setSubmittingDelete] = useState(false);
 
@@ -330,16 +333,28 @@ export function AdminOverview() {
                       )}
                     </td>
                     <td className="px-5 py-3.5 text-right">
-                      <button
-                        id={`delete-assessment-${a.id}`}
-                        type="button"
-                        onClick={() => setDeletingAssessment(a)}
-                        className="btn border border-danger/20 py-1 px-2.5 text-xs text-danger hover:bg-danger-light inline-flex items-center gap-1.5 font-semibold"
-                        title="Hapus asesmen klinis"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        <span>Hapus</span>
-                      </button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          id={`view-assessment-${a.id}`}
+                          type="button"
+                          onClick={() => setViewingAssessment(a)}
+                          className="btn border border-brand/30 py-1 px-2.5 text-xs text-brand hover:bg-brand-light inline-flex items-center gap-1.5 font-semibold transition"
+                          title="Lihat detail hasil asesmen"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          <span>Lihat</span>
+                        </button>
+                        <button
+                          id={`delete-assessment-${a.id}`}
+                          type="button"
+                          onClick={() => setDeletingAssessment(a)}
+                          className="btn border border-danger/20 py-1 px-2.5 text-xs text-danger hover:bg-danger-light inline-flex items-center gap-1.5 font-semibold transition"
+                          title="Hapus asesmen klinis"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          <span>Hapus</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -348,6 +363,227 @@ export function AdminOverview() {
           </div>
         )}
       </section>
+
+      {/* ============================================================== */}
+      {/* MODAL LIHAT DETAIL ASESMEN LENGKAP (ADMIN VIEW)                */}
+      {/* ============================================================== */}
+      {viewingAssessment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy/40 backdrop-blur-sm animate-fade-up">
+          <div className="card w-full max-w-2xl max-h-[90vh] flex flex-col p-6 shadow-2xl overflow-hidden">
+            {/* Header Modal */}
+            <div className="flex items-start justify-between border-b border-line pb-4 shrink-0">
+              <div className="flex items-center gap-3">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand-light text-brand">
+                  <ClipboardList className="h-6 w-6" />
+                </span>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="font-bold text-navy text-lg">
+                      Detail Asesmen: {viewingAssessment.clientCode}
+                    </h3>
+                    <Badge tone={getSSISeverity(viewingAssessment.ssPercentage).tone}>
+                      {getSSISeverity(viewingAssessment.ssPercentage).label}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted mt-0.5">
+                    Dokumentasi klinis oleh <strong className="text-navy">{viewingAssessment.therapistName}</strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingAssessment(null)}
+                className="rounded-lg p-1.5 text-muted hover:bg-canvas hover:text-navy transition"
+                aria-label="Tutup pratinjau asesmen"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Konten Scrollable */}
+            <div className="mt-4 space-y-4 overflow-y-auto pr-1">
+              {/* Identitas Klien & Terapis */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <div className="rounded-xl border border-line bg-canvas/40 p-2.5">
+                  <span className="text-[10px] font-bold text-muted uppercase tracking-wider">Kode Klien</span>
+                  <p className="text-sm font-bold text-navy mt-0.5">{viewingAssessment.clientCode}</p>
+                </div>
+                <div className="rounded-xl border border-line bg-canvas/40 p-2.5">
+                  <span className="text-[10px] font-bold text-muted uppercase tracking-wider">Usia Klien</span>
+                  <p className="text-sm font-bold text-navy mt-0.5">{viewingAssessment.clientAge} Tahun</p>
+                </div>
+                <div className="rounded-xl border border-line bg-canvas/40 p-2.5">
+                  <span className="text-[10px] font-bold text-muted uppercase tracking-wider">Tanggal Sesi</span>
+                  <p className="text-sm font-bold text-navy mt-0.5">{formatDate(viewingAssessment.assessmentDate)}</p>
+                </div>
+                <div className="rounded-xl border border-line bg-canvas/40 p-2.5">
+                  <span className="text-[10px] font-bold text-muted uppercase tracking-wider">Terapis</span>
+                  <p className="text-sm font-bold text-navy mt-0.5 truncate" title={viewingAssessment.therapistName}>
+                    {viewingAssessment.therapistName}
+                  </p>
+                </div>
+              </div>
+
+              {/* Panel Kalkulasi Formula %SS */}
+              <div className="rounded-2xl border border-brand/20 bg-gradient-to-br from-brand-light/30 via-white to-canvas p-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-muted">
+                      Hasil Kalkulasi Formula %SS
+                    </span>
+                    <div className="flex items-baseline gap-2 mt-0.5">
+                      <span className="text-3xl sm:text-4xl font-black text-navy">
+                        {formatPercent(viewingAssessment.ssPercentage)}
+                      </span>
+                      <span className="text-xs text-muted font-mono">
+                        ({viewingAssessment.stutteredSyllables} / {viewingAssessment.totalSyllables} suku kata)
+                      </span>
+                    </div>
+                  </div>
+                  <div className="sm:text-right">
+                    <Badge tone={getSSISeverity(viewingAssessment.ssPercentage).tone} className="text-xs font-bold py-1 px-3">
+                      {getSSISeverity(viewingAssessment.ssPercentage).label}
+                    </Badge>
+                    <p className="text-[11px] text-muted mt-1 max-w-xs">
+                      {getSSISeverity(viewingAssessment.ssPercentage).description}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-3 pt-3 border-t border-line/60 grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <span className="text-muted">Total Seluruh Suku Kata:</span>
+                    <span className="font-bold text-navy ml-1.5">{viewingAssessment.totalSyllables}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted">Suku Kata Gagap / Disfluency:</span>
+                    <span className="font-bold text-danger ml-1.5">{viewingAssessment.stutteredSyllables}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tugas Bicara & Observasi Disfluency */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="rounded-xl border border-line bg-white p-3">
+                  <h4 className="text-[11px] font-bold text-navy uppercase tracking-wide mb-2">
+                    Tugas Bicara yang Diobservasi
+                  </h4>
+                  <div className="flex flex-wrap gap-1.5">
+                    {viewingAssessment.speechTasks && viewingAssessment.speechTasks.length > 0 ? (
+                      viewingAssessment.speechTasks.map((t, i) => (
+                        <span
+                          key={i}
+                          className="rounded-lg bg-navy/5 text-navy border border-navy/15 px-2 py-0.5 text-xs font-medium"
+                        >
+                          {t}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-xs text-muted italic">Tidak ada tugas bicara tercatat</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-line bg-white p-3">
+                  <h4 className="text-[11px] font-bold text-navy uppercase tracking-wide mb-2">
+                    Karakteristik Ketidaklancaran
+                  </h4>
+                  <div className="flex flex-wrap gap-1.5">
+                    {viewingAssessment.disfluencyTypes && viewingAssessment.disfluencyTypes.length > 0 ? (
+                      viewingAssessment.disfluencyTypes.map((d, i) => (
+                        <span
+                          key={i}
+                          className="rounded-lg bg-brand-light text-brand-dark border border-brand/20 px-2 py-0.5 text-xs font-medium"
+                        >
+                          {d}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-xs text-muted italic">Tidak ada disfluency tercatat</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Riwayat Kasus */}
+              <div className="rounded-xl border border-line bg-white p-3">
+                <h4 className="text-[11px] font-bold text-navy uppercase tracking-wide mb-1.5">
+                  Riwayat Kasus (Case History)
+                </h4>
+                <p className="text-xs text-navy/90 leading-relaxed whitespace-pre-wrap">
+                  {viewingAssessment.caseHistory || "Tidak ada catatan riwayat kasus."}
+                </p>
+              </div>
+
+              {/* Catatan Observasi Terapis */}
+              <div className="rounded-xl border border-line bg-white p-3">
+                <h4 className="text-[11px] font-bold text-navy uppercase tracking-wide mb-1.5">
+                  Catatan Observasi Terapis & Rekomendasi
+                </h4>
+                <p className="text-xs text-navy/90 leading-relaxed whitespace-pre-wrap">
+                  {viewingAssessment.therapistNotes || "Tidak ada catatan observasi tambahan."}
+                </p>
+              </div>
+
+              {/* Audio Rekaman */}
+              <div className="rounded-xl border border-line bg-canvas/50 p-3.5">
+                <h4 className="text-[11px] font-bold text-navy uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                  <FileAudio className="h-4 w-4 text-brand" /> Rekaman Sampel Audio Bicara
+                </h4>
+                {viewingAssessment.audio ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs text-muted">
+                      <span>
+                        Durasi: <strong className="text-navy">{formatDuration(viewingAssessment.audio.durationSeconds)}</strong>
+                      </span>
+                      <span>
+                        Ukuran: <strong className="text-navy">{formatBytes(viewingAssessment.audio.sizeBytes)}</strong>
+                      </span>
+                    </div>
+                    {viewingAssessment.audio.url ? (
+                      <audio controls src={viewingAssessment.audio.url} className="w-full h-9 mt-1" />
+                    ) : viewingAssessment.audio.fileReference ? (
+                      <audio
+                        controls
+                        src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/audio_samples/${viewingAssessment.audio.fileReference}`}
+                        className="w-full h-9 mt-1"
+                      />
+                    ) : (
+                      <p className="text-xs text-muted italic">Sampel audio mode lokal / tanpa tautan streaming.</p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted italic">Tidak ada rekaman audio yang dilampirkan pada asesmen ini.</p>
+                )}
+              </div>
+            </div>
+
+            {/* Footer Modal */}
+            <div className="flex items-center justify-between mt-5 pt-4 border-t border-line shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  const toDelete = viewingAssessment;
+                  setViewingAssessment(null);
+                  setDeletingAssessment(toDelete);
+                }}
+                className="btn border border-danger/20 py-1.5 px-3 text-xs text-danger hover:bg-danger-light inline-flex items-center gap-1.5 font-semibold"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>Hapus Asesmen</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setViewingAssessment(null)}
+                className="btn-primary text-xs py-1.5 px-5 font-bold"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ============================================================== */}
       {/* MODAL KONFIRMASI HAPUS ASESMEN (ADMIN ONLY)                    */}

@@ -121,6 +121,18 @@ export function AuthProvider({ initialSession, children }: { initialSession: Ses
 
         if (data.user && !error) {
           const user = userFromSupabase(data.user);
+          try {
+            const { data: prof } = await supabase
+              .from("profiles")
+              .select("full_name")
+              .eq("id", data.user.id)
+              .maybeSingle();
+            if (prof?.full_name) {
+              user.fullName = prof.full_name;
+            }
+          } catch {
+            // fallback ke user_metadata
+          }
           if (!canUseRole(user, "supabase", role)) {
             await supabase.auth.signOut();
             await demoRepository.recordLoginLog?.({
