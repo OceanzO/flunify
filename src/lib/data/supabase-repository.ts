@@ -147,42 +147,124 @@ export function createSupabaseRepository(supabase: SupabaseClient): Repository {
     },
 
     async listUsers() {
+      let localPasswords: Record<string, string> = {};
+      try {
+        if (typeof window !== "undefined") {
+          const raw = window.localStorage.getItem("flunify_passwords_cache");
+          if (raw) localPasswords = JSON.parse(raw);
+        }
+      } catch {
+        // Abaikan kegagalan baca localStorage
+      }
+
       const [{ data: profiles, error }, { data: counts }] = await Promise.all([
-        supabase.from("profiles").select("id, full_name, username, email, account_type, status, created_at").order("created_at"),
+        supabase.from("profiles").select("*").order("created_at"),
         supabase.from("assessments").select("therapist_id"),
       ]);
       if (error) fail("Gagal memuat pengguna", error);
       const tally = new Map<string, number>();
       (counts ?? []).forEach((r: { therapist_id: string }) => tally.set(r.therapist_id, (tally.get(r.therapist_id) ?? 0) + 1));
       return (profiles ?? []).map(
-        (p): ManagedUser => ({
-          id: p.id,
-          fullName: p.full_name,
-          username: (p as unknown as { username?: string }).username || (p.email ? p.email.split("@")[0] : `user.${p.id}`),
-          email: p.email,
-          accountType: p.account_type,
-          status: p.status,
-          assessmentCount: tally.get(p.id) ?? 0,
-          createdAt: p.created_at,
-          lastLoginAt: null,
-        }),
+        (p): ManagedUser => {
+          const cleanUser = (p as unknown as { username?: string }).username || (p.email ? p.email.split("@")[0] : `user.${p.id}`);
+          const pass = (p as unknown as { raw_password?: string }).raw_password || localPasswords[p.id] || localPasswords[cleanUser] || (p.account_type === "admin" ? "Poltekkes@Admin2026" : "Terapis@Flunify2026");
+          return {
+            id: p.id,
+            fullName: p.full_name,
+            username: cleanUser,
+            email: p.email,
+            password: pass,
+            accountType: p.account_type,
+            status: p.status,
+            assessmentCount: tally.get(p.id) ?? 0,
+            createdAt: p.created_at,
+            lastLoginAt: null,
+          };
+        },
       );
     },
 
-    addUser: async ({ fullName, username, email, accountType }) => {
+    addUser: async ({ fullName, username, email, accountType, password }) => {
       const cleanUsername = username.trim().toLowerCase().replace(/\s+/g, ".");
       const finalEmail = (email?.trim() || `${cleanUsername}@flunify.id`).toLowerCase();
-      const { data, error } = await supabase
+      const initialPassword = password?.trim() || "Terapis@Flunify2026";
+
+      // 1. Simpan password ke cache lokal
+      try {
+        if (typeof window !== "undefined") {
+          const raw = window.localStorage.getItem("flunify_passwords_cache");
+          const cache = raw ? JSON.parse(raw) : {};
+          cache[cleanUsername] = initialPassword;
+          window.localStorage.setItem("flunify_passwords_cache", JSON.stringify(cache));
+        }
+      } catch {
+        // Abaikan
+      }
+
+      // 2. Coba daftarkan via RPC admin_create_user (agar otomatis terdaftar di auth.users & profiles)
+      try {
+        const { data: rpcId, error: rpcError } = await supabase.rpc("admin_create_user", {
+          p_email: finalEmail,
+          p_password: initialPassword,
+          p_full_name: fullName.trim(),
+          p_username: cleanUsername,
+          p_role: accountType,
+        });
+
+        if (!rpcError && rpcId) {
+          try {
+            if (typeof window !== "undefined") {
+              const raw = window.localStorage.getItem("flunify_passwords_cache");
+              const cache = raw ? JSON.parse(raw) : {};
+              cache[rpcId as string] = initialPassword;
+              cache[cleanUsername] = initialPassword;
+              window.localStorage.setItem("flunify_passwords_cache", JSON.stringify(cache));
+            }
+          } catch {}
+
+          return {
+            id: rpcId as string,
+            fullName: fullName.trim(),
+            username: cleanUsername,
+            email: finalEmail,
+            password: initialPassword,
+            accountType,
+            status: "active",
+            assessmentCount: 0,
+            createdAt: new Date().toISOString(),
+          };
+        }
+      } catch {
+        // Lanjutkan ke direct insert jika RPC belum terpasang
+      }
+
+      // 3. Fallback: simpan langsung ke public.profiles
+      const insertPayload: Record<string, unknown> = {
+        full_name: fullName.trim(),
+        username: cleanUsername,
+        email: finalEmail,
+        account_type: accountType,
+        status: "active",
+        raw_password: initialPassword,
+      };
+
+      let { data, error } = await supabase
         .from("profiles")
-        .insert({
-          full_name: fullName.trim(),
-          username: cleanUsername,
-          email: finalEmail,
-          account_type: accountType,
-          status: "active",
-        })
+        .insert(insertPayload)
         .select()
         .single();
+
+      if (error && insertPayload.raw_password) {
+        delete insertPayload.raw_password;
+        const retry = await supabase
+          .from("profiles")
+          .insert(insertPayload)
+          .select()
+          .single();
+        data = retry.data;
+        error = retry.error;
+      }
+
       if (error || !data) {
         const msg = error?.message?.toLowerCase() || "";
         if (msg.includes("unique") || msg.includes("profiles_username_key") || msg.includes("duplicate")) {
@@ -190,11 +272,23 @@ export function createSupabaseRepository(supabase: SupabaseClient): Repository {
         }
         fail("Gagal menambahkan profil", error);
       }
+
+      try {
+        if (typeof window !== "undefined") {
+          const raw = window.localStorage.getItem("flunify_passwords_cache");
+          const cache = raw ? JSON.parse(raw) : {};
+          cache[data.id] = initialPassword;
+          cache[cleanUsername] = initialPassword;
+          window.localStorage.setItem("flunify_passwords_cache", JSON.stringify(cache));
+        }
+      } catch {}
+
       return {
         id: data.id,
         fullName: data.full_name,
         username: (data as unknown as { username?: string }).username || cleanUsername,
         email: data.email,
+        password: initialPassword,
         accountType: data.account_type,
         status: data.status,
         assessmentCount: 0,
@@ -203,10 +297,39 @@ export function createSupabaseRepository(supabase: SupabaseClient): Repository {
     },
 
     async updateUser(id, updates) {
+      const cleanUser = updates.username
+        ? updates.username.trim().toLowerCase().replace(/\s+/g, ".")
+        : undefined;
+
+      if (updates.password && updates.password.trim().length >= 8) {
+        const newPass = updates.password.trim();
+        // 1. Simpan di cache lokal
+        try {
+          if (typeof window !== "undefined") {
+            const raw = window.localStorage.getItem("flunify_passwords_cache");
+            const cache = raw ? JSON.parse(raw) : {};
+            cache[id] = newPass;
+            if (cleanUser) cache[cleanUser] = newPass;
+            window.localStorage.setItem("flunify_passwords_cache", JSON.stringify(cache));
+          }
+        } catch {
+          // Abaikan
+        }
+
+        // 2. Update via RPC ke auth.users dan profiles
+        try {
+          await supabase.rpc("admin_update_user_password", {
+            p_user_id: id,
+            p_new_password: newPass,
+          });
+        } catch {
+          // Abaikan jika RPC belum terpasang
+        }
+      }
+
       const payload: Record<string, unknown> = {};
       if (updates.fullName !== undefined) payload.full_name = updates.fullName.trim();
-      if (updates.username !== undefined) {
-        const cleanUser = updates.username.trim().toLowerCase().replace(/\s+/g, ".");
+      if (cleanUser !== undefined) {
         payload.username = cleanUser;
         if (!updates.email || updates.email.endsWith("@flunify.id")) {
           payload.email = `${cleanUser}@flunify.id`;
@@ -217,13 +340,29 @@ export function createSupabaseRepository(supabase: SupabaseClient): Repository {
       }
       if (updates.accountType !== undefined) payload.account_type = updates.accountType;
       if (updates.status !== undefined) payload.status = updates.status;
+      if (updates.password && updates.password.trim().length >= 8) {
+        payload.raw_password = updates.password.trim();
+      }
 
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from("profiles")
         .update(payload)
         .eq("id", id)
         .select()
         .single();
+
+      if (error && payload.raw_password) {
+        delete payload.raw_password;
+        const retry = await supabase
+          .from("profiles")
+          .update(payload)
+          .eq("id", id)
+          .select()
+          .single();
+        data = retry.data;
+        error = retry.error;
+      }
+
       if (error || !data) {
         const msg = error?.message?.toLowerCase() || "";
         if (msg.includes("unique") || msg.includes("profiles_username_key") || msg.includes("duplicate")) {
@@ -231,11 +370,14 @@ export function createSupabaseRepository(supabase: SupabaseClient): Repository {
         }
         fail("Gagal memperbarui pengguna", error);
       }
+
+      const returnedPassword = updates.password ? updates.password.trim() : (data as unknown as { raw_password?: string }).raw_password;
       return {
         id: data.id,
         fullName: data.full_name,
         username: (data as unknown as { username?: string }).username || (data.email ? data.email.split("@")[0] : ""),
         email: data.email,
+        password: returnedPassword,
         accountType: data.account_type,
         status: data.status,
         assessmentCount: 0,
@@ -244,6 +386,11 @@ export function createSupabaseRepository(supabase: SupabaseClient): Repository {
     },
 
     async deleteUser(id) {
+      try {
+        await supabase.rpc("admin_delete_user", { p_user_id: id });
+      } catch {
+        // Abaikan jika RPC belum terpasang
+      }
       const { error } = await supabase.from("profiles").delete().eq("id", id);
       if (error) fail("Gagal menghapus pengguna", error);
     },

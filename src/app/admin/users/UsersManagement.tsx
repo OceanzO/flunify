@@ -350,10 +350,6 @@ export function UsersManagement() {
         description="Kelola akun terapis wicara, ubah kata sandi, hapus akun, dan monitor riwayat login secara menyeluruh."
         actions={
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="inline-flex items-center gap-1.5 rounded-xl border border-success/30 bg-success-light px-3 py-1.5 text-xs font-bold text-success shadow-xs">
-              <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
-              Realtime Supabase Cloud
-            </span>
             <button
               id="refresh-data"
               type="button"
