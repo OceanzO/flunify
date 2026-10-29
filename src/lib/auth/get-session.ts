@@ -12,22 +12,26 @@ export async function getServerSession(): Promise<Session | null> {
 
   const supabase = await createSupabaseServerClient();
   if (supabase) {
-    const { data } = await supabase.auth.getUser();
-    if (data.user) {
-      const user = userFromSupabase(data.user);
-      try {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("full_name")
-          .eq("id", data.user.id)
-          .maybeSingle();
-        if (profile?.full_name) {
-          user.fullName = profile.full_name;
+    try {
+      const { data } = await supabase.auth.getUser();
+      if (data?.user) {
+        const user = userFromSupabase(data.user);
+        try {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("full_name")
+            .eq("id", data.user.id)
+            .maybeSingle();
+          if (profile?.full_name) {
+            user.fullName = profile.full_name;
+          }
+        } catch {
+          // Fallback ke user_metadata jika query gagal
         }
-      } catch {
-        // Fallback ke user_metadata jika query gagal
+        return { user, mode: "supabase", activeRole: resolveActiveRole(user, "supabase", roleCookie) };
       }
-      return { user, mode: "supabase", activeRole: resolveActiveRole(user, "supabase", roleCookie) };
+    } catch {
+      // Refresh token kedaluwarsa atau tidak valid di Supabase Auth
     }
   }
 

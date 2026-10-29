@@ -33,10 +33,14 @@ export async function proxy(request: NextRequest) {
         },
       },
     });
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (user) activeRole = resolveActiveRole(userFromSupabase(user), "supabase", roleCookie);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) activeRole = resolveActiveRole(userFromSupabase(user), "supabase", roleCookie);
+    } catch {
+      // Token kedaluwarsa atau tidak valid di Supabase Auth, lanjut sebagai tamu
+    }
   }
 
   if (!activeRole && isDemoEnabled) {
